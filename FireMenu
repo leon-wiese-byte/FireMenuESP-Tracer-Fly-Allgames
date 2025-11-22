@@ -1,0 +1,489 @@
+--[[ 
+    🔥 FIRE MENU (ALL-IN-ONE) — WITH KEY SYSTEM
+    Key required: EasyEasy23
+    Menu + ESP (Highlight) + Tracer + Fly
+    Place this LocalScript in:
+    StarterPlayer > StarterPlayerScripts
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local lp = Players.LocalPlayer
+
+-- ====== KEY SYSTEM ======
+local REQUIRED_KEY = "EasyEasy23"
+local unlocked = false
+
+-- ====== HELPERS ======
+local function getChar()
+    return lp.Character or lp.CharacterAdded:Wait()
+end
+
+-- ====== STATE ======
+local espEnabled = false
+local tracerEnabled = false
+local flying = false
+local flySpeed = 100
+local tracers = {} -- [player] = part
+
+-- fly physics objects
+local flyAttach, flyLV, flyAO
+local function stopFly()
+    if flyLV then flyLV:Destroy() flyLV = nil end
+    if flyAO then flyAO:Destroy() flyAO = nil end
+    if flyAttach then flyAttach:Destroy() flyAttach = nil end
+end
+
+-- ====== THEME ======
+local THEME = {
+    panel = Color3.fromRGB(60, 10, 10),
+    panel2 = Color3.fromRGB(80, 12, 12),
+    accent = Color3.fromRGB(200, 40, 40),
+    accent2 = Color3.fromRGB(255, 80, 50),
+    text = Color3.fromRGB(255, 240, 240),
+    muted = Color3.fromRGB(255, 180, 180),
+    dark = Color3.fromRGB(20, 5, 5)
+}
+
+-- ====== UI ROOT ======
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FireMenuUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+
+-- ====== KEY UI ======
+local KeyFrame = Instance.new("Frame", ScreenGui)
+KeyFrame.Size = UDim2.new(0, 260, 0, 160)
+KeyFrame.Position = UDim2.new(0.5, -130, 0.5, -80)
+KeyFrame.BackgroundColor3 = THEME.panel
+KeyFrame.BorderSizePixel = 0
+KeyFrame.Active = true
+KeyFrame.Draggable = true
+Instance.new("UICorner", KeyFrame).CornerRadius = UDim.new(0, 14)
+local keyStroke = Instance.new("UIStroke", KeyFrame)
+keyStroke.Color = THEME.accent2
+keyStroke.Thickness = 2
+keyStroke.Transparency = 0.1
+
+local keyTitle = Instance.new("TextLabel", KeyFrame)
+keyTitle.BackgroundTransparency = 1
+keyTitle.Size = UDim2.new(1, -20, 0, 40)
+keyTitle.Position = UDim2.new(0, 10, 0, 5)
+keyTitle.Font = Enum.Font.GothamBold
+keyTitle.TextSize = 20
+keyTitle.TextColor3 = THEME.text
+keyTitle.Text = "🔥 Fire Menu Key"
+
+local keyBox = Instance.new("TextBox", KeyFrame)
+keyBox.Size = UDim2.new(1, -20, 0, 40)
+keyBox.Position = UDim2.new(0, 10, 0, 55)
+keyBox.BackgroundColor3 = THEME.panel2
+keyBox.BorderSizePixel = 0
+keyBox.Font = Enum.Font.GothamBold
+keyBox.TextSize = 18
+keyBox.TextColor3 = THEME.text
+keyBox.PlaceholderText = "Key eingeben..."
+keyBox.Text = ""
+keyBox.ClearTextOnFocus = false
+Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0, 10)
+local keyBoxStroke = Instance.new("UIStroke", keyBox)
+keyBoxStroke.Color = THEME.accent
+keyBoxStroke.Transparency = 0.35
+
+local keyStatus = Instance.new("TextLabel", KeyFrame)
+keyStatus.BackgroundTransparency = 1
+keyStatus.Size = UDim2.new(1, -20, 0, 20)
+keyStatus.Position = UDim2.new(0, 10, 0, 98)
+keyStatus.Font = Enum.Font.Gotham
+keyStatus.TextSize = 14
+keyStatus.TextColor3 = THEME.muted
+keyStatus.Text = ""
+
+local keyBtn = Instance.new("TextButton", KeyFrame)
+keyBtn.Size = UDim2.new(1, -20, 0, 34)
+keyBtn.Position = UDim2.new(0, 10, 0, 120)
+keyBtn.BackgroundColor3 = THEME.accent
+keyBtn.BorderSizePixel = 0
+keyBtn.Font = Enum.Font.GothamBold
+keyBtn.TextSize = 16
+keyBtn.TextColor3 = THEME.text
+keyBtn.Text = "Unlock"
+Instance.new("UICorner", keyBtn).CornerRadius = UDim.new(0, 10)
+
+local hoverInKey = TweenService:Create(keyBtn, TweenInfo.new(0.12), {BackgroundColor3 = THEME.accent2})
+local hoverOutKey = TweenService:Create(keyBtn, TweenInfo.new(0.12), {BackgroundColor3 = THEME.accent})
+keyBtn.MouseEnter:Connect(function() hoverInKey:Play() end)
+keyBtn.MouseLeave:Connect(function() hoverOutKey:Play() end)
+
+-- ====== FIRE MENU (hidden until key) ======
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.BackgroundColor3 = THEME.panel
+Frame.Size = UDim2.new(0, 210, 0, 260)
+Frame.Position = UDim2.new(0, 20, 0, 120)
+Frame.Active = true
+Frame.Draggable = true
+Frame.BorderSizePixel = 0
+Frame.Visible = false -- locked first
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 14)
+
+local stroke = Instance.new("UIStroke", Frame)
+stroke.Color = THEME.accent2
+stroke.Thickness = 2
+stroke.Transparency = 0.1
+
+local grad = Instance.new("UIGradient", Frame)
+grad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, THEME.panel2),
+    ColorSequenceKeypoint.new(1, THEME.panel)
+})
+grad.Rotation = 90
+
+local header = Instance.new("Frame", Frame)
+header.Size = UDim2.new(1, 0, 0, 44)
+header.BackgroundColor3 = THEME.accent
+header.BorderSizePixel = 0
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 14)
+
+local headerFix = Instance.new("Frame", header)
+headerFix.Size = UDim2.new(1, 0, 0, 18)
+headerFix.Position = UDim2.new(0, 0, 1, -18)
+headerFix.BackgroundColor3 = THEME.accent
+headerFix.BorderSizePixel = 0
+
+local title = Instance.new("TextLabel", header)
+title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, -10, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextColor3 = THEME.text
+title.Text = "🔥 Fire Menu"
+
+local subtitle = Instance.new("TextLabel", header)
+subtitle.BackgroundTransparency = 1
+subtitle.Size = UDim2.new(1, -10, 1, 0)
+subtitle.Position = UDim2.new(0, 10, 0, 18)
+subtitle.TextXAlignment = Enum.TextXAlignment.Left
+subtitle.Font = Enum.Font.Gotham
+subtitle.TextSize = 12
+subtitle.TextColor3 = THEME.muted
+subtitle.Text = "Toggle Features"
+
+local content = Instance.new("Frame", Frame)
+content.BackgroundTransparency = 1
+content.Size = UDim2.new(1, -16, 1, -60)
+content.Position = UDim2.new(0, 8, 0, 52)
+
+local list = Instance.new("UIListLayout", content)
+list.Padding = UDim.new(0, 8)
+list.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function makeButton(labelText, emoji)
+    local holder = Instance.new("Frame", content)
+    holder.BackgroundTransparency = 1
+    holder.Size = UDim2.new(1, 0, 0, 44)
+
+    local btn = Instance.new("TextButton", holder)
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundColor3 = THEME.panel2
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.BorderSizePixel = 0
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+    local btnStroke = Instance.new("UIStroke", btn)
+    btnStroke.Color = THEME.accent
+    btnStroke.Thickness = 1
+    btnStroke.Transparency = 0.35
+
+    local icon = Instance.new("TextLabel", btn)
+    icon.BackgroundTransparency = 1
+    icon.Size = UDim2.new(0, 40, 1, 0)
+    icon.Position = UDim2.new(0, 8, 0, 0)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 18
+    icon.TextColor3 = THEME.text
+    icon.Text = emoji
+
+    local label = Instance.new("TextLabel", btn)
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, -90, 1, 0)
+    label.Position = UDim2.new(0, 48, 0, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 16
+    label.TextColor3 = THEME.text
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Text = labelText
+
+    local state = Instance.new("TextLabel", btn)
+    state.BackgroundTransparency = 1
+    state.Size = UDim2.new(0, 60, 1, 0)
+    state.Position = UDim2.new(1, -68, 0, 0)
+    state.Font = Enum.Font.GothamBold
+    state.TextSize = 14
+    state.TextColor3 = THEME.muted
+    state.Text = "OFF"
+    state.TextXAlignment = Enum.TextXAlignment.Right
+
+    local hoverIn = TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = THEME.accent})
+    local hoverOut = TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = THEME.panel2})
+    btn.MouseEnter:Connect(function() hoverIn:Play() end)
+    btn.MouseLeave:Connect(function() hoverOut:Play() end)
+
+    return btn, state
+end
+
+local espBtn, espState = makeButton("ESP Highlight", "👁️")
+local tracerBtn, tracerState = makeButton("Tracer Lines", "📍")
+local flyBtn, flyState = makeButton("Fly Mode", "🕊️")
+
+local speedRow = Instance.new("Frame", content)
+speedRow.Size = UDim2.new(1, 0, 0, 44)
+speedRow.BackgroundTransparency = 1
+
+local speedBox = Instance.new("TextBox", speedRow)
+speedBox.Size = UDim2.new(1, 0, 1, 0)
+speedBox.BackgroundColor3 = THEME.panel2
+speedBox.BorderSizePixel = 0
+speedBox.Font = Enum.Font.GothamBold
+speedBox.TextSize = 16
+speedBox.TextColor3 = THEME.text
+speedBox.PlaceholderText = "🔥 Fly Speed (1 - 10000)"
+speedBox.Text = tostring(flySpeed)
+speedBox.ClearTextOnFocus = false
+Instance.new("UICorner", speedBox).CornerRadius = UDim.new(0, 10)
+local speedStroke = Instance.new("UIStroke", speedBox)
+speedStroke.Color = THEME.accent
+speedStroke.Transparency = 0.35
+speedStroke.Thickness = 1
+
+local hint = Instance.new("TextLabel", Frame)
+hint.BackgroundTransparency = 1
+hint.Size = UDim2.new(1, -16, 0, 36)
+hint.Position = UDim2.new(0, 8, 1, -38)
+hint.Font = Enum.Font.Gotham
+hint.TextSize = 12
+hint.TextColor3 = THEME.muted
+hint.TextWrapped = true
+hint.Text = "WASD = bewegen | SPACE hoch | CTRL runter\nMenü ist dragbar"
+
+-- ====== ESP ======
+local function createHighlight(char)
+    if not char or char:FindFirstChild("ESP_HIGHLIGHT") then return end
+    local h = Instance.new("Highlight")
+    h.Name = "ESP_HIGHLIGHT"
+    h.FillColor = Color3.fromRGB(255, 60, 60)
+    h.OutlineColor = Color3.fromRGB(255, 220, 220)
+    h.FillTransparency = 0.35
+    h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = char
+end
+
+local function removeHighlight(char)
+    if not char then return end
+    local h = char:FindFirstChild("ESP_HIGHLIGHT")
+    if h then h:Destroy() end
+end
+
+local function refreshESP()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            if espEnabled then createHighlight(p.Character)
+            else removeHighlight(p.Character) end
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function(char)
+        if espEnabled then task.wait(0.5) createHighlight(char) end
+    end)
+end)
+
+lp.CharacterAdded:Connect(function(char)
+    if espEnabled then task.wait(0.5) createHighlight(char) end
+end)
+
+-- ====== TRACERS ======
+local function clearTracers()
+    for p, part in pairs(tracers) do
+        if part then part:Destroy() end
+        tracers[p] = nil
+    end
+end
+
+local function ensureTracerFor(p)
+    if tracers[p] then return end
+    local part = Instance.new("Part")
+    part.Name = "TracerPart"
+    part.Anchored = true
+    part.CanCollide = false
+    part.Material = Enum.Material.Neon
+    part.Color = Color3.fromRGB(255, 40, 40)
+    part.Size = Vector3.new(0.12, 0.12, 1)
+    part.Parent = workspace
+    tracers[p] = part
+end
+
+Players.PlayerRemoving:Connect(function(p)
+    if tracers[p] then tracers[p]:Destroy() tracers[p] = nil end
+end)
+
+-- ====== INPUTS ======
+speedBox.FocusLost:Connect(function()
+    local n = tonumber(speedBox.Text)
+    if n then
+        flySpeed = math.clamp(n, 1, 10000)
+        speedBox.Text = tostring(flySpeed)
+    else
+        speedBox.Text = tostring(flySpeed)
+    end
+end)
+
+-- ====== BUTTON EVENTS ======
+local function setStateLabel(lbl, on)
+    lbl.Text = on and "ON" or "OFF"
+    lbl.TextColor3 = on and THEME.text or THEME.muted
+end
+
+espBtn.MouseButton1Click:Connect(function()
+    if not unlocked then return end
+    espEnabled = not espEnabled
+    setStateLabel(espState, espEnabled)
+    refreshESP()
+end)
+
+tracerBtn.MouseButton1Click:Connect(function()
+    if not unlocked then return end
+    tracerEnabled = not tracerEnabled
+    setStateLabel(tracerState, tracerEnabled)
+    if not tracerEnabled then clearTracers() end
+end)
+
+flyBtn.MouseButton1Click:Connect(function()
+    if not unlocked then return end
+    flying = not flying
+    setStateLabel(flyState, flying)
+
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    if flying then
+        flyAttach = Instance.new("Attachment")
+        flyAttach.Name = "FlyAttach"
+        flyAttach.Parent = hrp
+
+        flyLV = Instance.new("LinearVelocity")
+        flyLV.Name = "FlyVelocity"
+        flyLV.Attachment0 = flyAttach
+        flyLV.RelativeTo = Enum.ActuatorRelativeTo.World
+        flyLV.MaxForce = math.huge
+        flyLV.VectorVelocity = Vector3.zero
+        flyLV.Parent = hrp
+
+        flyAO = Instance.new("AlignOrientation")
+        flyAO.Name = "FlyOrientation"
+        flyAO.Attachment0 = flyAttach
+        flyAO.RigidityEnabled = false
+        flyAO.Responsiveness = 20
+        flyAO.MaxTorque = math.huge
+        flyAO.Parent = hrp
+
+        hum.PlatformStand = true
+    else
+        stopFly()
+        hum.PlatformStand = false
+    end
+end)
+
+lp.CharacterAdded:Connect(function()
+    flying = false
+    setStateLabel(flyState, false)
+    stopFly()
+end)
+
+-- ====== KEY CHECK ======
+local function unlockMenu()
+    unlocked = true
+    KeyFrame.Visible = false
+    Frame.Visible = true
+end
+
+keyBtn.MouseButton1Click:Connect(function()
+    if keyBox.Text == REQUIRED_KEY then
+        keyStatus.TextColor3 = Color3.fromRGB(180,255,180)
+        keyStatus.Text = "✅ Key korrekt! Menü unlocked."
+        unlockMenu()
+    else
+        keyStatus.TextColor3 = Color3.fromRGB(255,180,180)
+        keyStatus.Text = "❌ Falscher Key. Versuch nochmal."
+        keyBox.Text = ""
+        -- kleiner Shake-Effect
+        local orig = KeyFrame.Position
+        KeyFrame.Position = orig + UDim2.new(0, 6, 0, 0)
+        task.wait(0.05)
+        KeyFrame.Position = orig + UDim2.new(0, -6, 0, 0)
+        task.wait(0.05)
+        KeyFrame.Position = orig
+    end
+end)
+
+-- Allow enter key to submit
+keyBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then keyBtn:Activate() end
+end)
+
+-- ====== MAIN LOOP ======
+RunService.RenderStepped:Connect(function()
+    if not unlocked then return end
+
+    local char = lp.Character
+    if not char then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- TRACERS UPDATE
+    if tracerEnabled then
+        local localPos = hrp.Position
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                ensureTracerFor(p)
+                local targetPos = p.Character.HumanoidRootPart.Position
+                local dist = (localPos - targetPos).Magnitude
+
+                local tracerPart = tracers[p]
+                tracerPart.Size = Vector3.new(0.12, 0.12, dist)
+                tracerPart.CFrame = CFrame.lookAt(localPos, targetPos) * CFrame.new(0, 0, -dist/2)
+            end
+        end
+    end
+
+    -- STABLE FLY UPDATE
+    if flying and flyLV and flyAO then
+        local cam = workspace.CurrentCamera
+        local moveDir = Vector3.zero
+
+        if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir += cam.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir -= cam.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir -= cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir += cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then moveDir += Vector3.new(0,1,0) end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir -= Vector3.new(0,1,0) end
+
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit
+        end
+
+        flyLV.VectorVelocity = moveDir * flySpeed
+        flyAO.CFrame = cam.CFrame
+    end
+end)
