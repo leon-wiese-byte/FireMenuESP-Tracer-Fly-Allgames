@@ -1,9 +1,10 @@
 --[[ 
-    🔥 FIRE MENU (ALL-IN-ONE) — WITH KEY SYSTEM
+    🔥 FIRE MENU (ALL-IN-ONE) — WITH KEY + ESP + TRACER + STABLE FLY + FAKE AIMBOT
     Key required: EasyEasy23
-    Menu + ESP (Highlight) + Tracer + Fly
-    Place this LocalScript in:
-    StarterPlayer > StarterPlayerScripts
+
+    NOTE:
+    - This is intended as a LEGAL gameplay feature for YOUR OWN game.
+    - Aimbot here is "fake aim assist": camera snap only, no auto shooting.
 ]]
 
 local Players = game:GetService("Players")
@@ -12,6 +13,7 @@ local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local lp = Players.LocalPlayer
+local mouse = lp:GetMouse()
 
 -- ====== KEY SYSTEM ======
 local REQUIRED_KEY = "EasyEasy23"
@@ -27,6 +29,10 @@ local espEnabled = false
 local tracerEnabled = false
 local flying = false
 local flySpeed = 100
+
+local aimbotEnabled = false
+local aimingHeld = false -- hold RMB to snap
+
 local tracers = {} -- [player] = part
 
 -- fly physics objects
@@ -44,8 +50,7 @@ local THEME = {
     accent = Color3.fromRGB(200, 40, 40),
     accent2 = Color3.fromRGB(255, 80, 50),
     text = Color3.fromRGB(255, 240, 240),
-    muted = Color3.fromRGB(255, 180, 180),
-    dark = Color3.fromRGB(20, 5, 5)
+    muted = Color3.fromRGB(255, 180, 180)
 }
 
 -- ====== UI ROOT ======
@@ -121,12 +126,12 @@ keyBtn.MouseLeave:Connect(function() hoverOutKey:Play() end)
 -- ====== FIRE MENU (hidden until key) ======
 local Frame = Instance.new("Frame", ScreenGui)
 Frame.BackgroundColor3 = THEME.panel
-Frame.Size = UDim2.new(0, 210, 0, 260)
+Frame.Size = UDim2.new(0, 220, 0, 305) -- a bit taller for aimbot row
 Frame.Position = UDim2.new(0, 20, 0, 120)
 Frame.Active = true
 Frame.Draggable = true
 Frame.BorderSizePixel = 0
-Frame.Visible = false -- locked first
+Frame.Visible = false
 Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 14)
 
 local stroke = Instance.new("UIStroke", Frame)
@@ -240,6 +245,7 @@ end
 local espBtn, espState = makeButton("ESP Highlight", "👁️")
 local tracerBtn, tracerState = makeButton("Tracer Lines", "📍")
 local flyBtn, flyState = makeButton("Fly Mode", "🕊️")
+local aimBtn, aimState = makeButton("Fake Aimbot (Head)", "🎯")
 
 local speedRow = Instance.new("Frame", content)
 speedRow.Size = UDim2.new(1, 0, 0, 44)
@@ -263,13 +269,19 @@ speedStroke.Thickness = 1
 
 local hint = Instance.new("TextLabel", Frame)
 hint.BackgroundTransparency = 1
-hint.Size = UDim2.new(1, -16, 0, 36)
-hint.Position = UDim2.new(0, 8, 1, -38)
+hint.Size = UDim2.new(1, -16, 0, 40)
+hint.Position = UDim2.new(0, 8, 1, -42)
 hint.Font = Enum.Font.Gotham
 hint.TextSize = 12
 hint.TextColor3 = THEME.muted
 hint.TextWrapped = true
-hint.Text = "WASD = bewegen | SPACE hoch | CTRL runter\nMenü ist dragbar"
+hint.Text = "Aimbot: halte RMB (Rechtsklick)\nWASD Fly | SPACE hoch | CTRL runter"
+
+-- ====== UTIL: state label ======
+local function setStateLabel(lbl, on)
+    lbl.Text = on and "ON" or "OFF"
+    lbl.TextColor3 = on and THEME.text or THEME.muted
+end
 
 -- ====== ESP ======
 local function createHighlight(char)
@@ -334,6 +346,68 @@ Players.PlayerRemoving:Connect(function(p)
     if tracers[p] then tracers[p]:Destroy() tracers[p] = nil end
 end)
 
+-- ====== FAKE AIMBOT (Snap to Head + Team Check) ======
+local AIM_MAX_DISTANCE = 1500 -- studs
+local function isEnemy(p)
+    if p == lp then return false end
+    -- Standard Roblox Teams check:
+    if lp.Team ~= nil and p.Team ~= nil then
+        return p.Team ~= lp.Team
+    end
+    -- If no teams set, treat as enemy (FFA)
+    return true
+end
+
+local function getBestTarget()
+    local cam = workspace.CurrentCamera
+    local myChar = lp.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+
+    local best, bestDist = nil, math.huge
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isEnemy(p) and p.Character and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local dist = (myHRP.Position - head.Position).Magnitude
+                if dist < AIM_MAX_DISTANCE then
+                    local screenPos, onScreen = cam:WorldToViewportPoint(head.Position)
+                    if onScreen and screenPos.Z > 0 then
+                        if dist < bestDist then
+                            bestDist = dist
+                            best = head
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return best
+end
+
+local function snapTo(part)
+    if not part then return end
+    local cam = workspace.CurrentCamera
+    cam.CFrame = CFrame.new(cam.CFrame.Position, part.Position)
+end
+
+-- RMB hold to aim
+UIS.InputBegan:Connect(function(input, gp)
+    if gp or not unlocked then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        aimingHeld = true
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        aimingHeld = false
+    end
+end)
+
 -- ====== INPUTS ======
 speedBox.FocusLost:Connect(function()
     local n = tonumber(speedBox.Text)
@@ -345,12 +419,7 @@ speedBox.FocusLost:Connect(function()
     end
 end)
 
--- ====== BUTTON EVENTS ======
-local function setStateLabel(lbl, on)
-    lbl.Text = on and "ON" or "OFF"
-    lbl.TextColor3 = on and THEME.text or THEME.muted
-end
-
+-- ====== BUTTONS ======
 espBtn.MouseButton1Click:Connect(function()
     if not unlocked then return end
     espEnabled = not espEnabled
@@ -404,6 +473,12 @@ flyBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+aimBtn.MouseButton1Click:Connect(function()
+    if not unlocked then return end
+    aimbotEnabled = not aimbotEnabled
+    setStateLabel(aimState, aimbotEnabled)
+end)
+
 lp.CharacterAdded:Connect(function()
     flying = false
     setStateLabel(flyState, false)
@@ -426,7 +501,6 @@ keyBtn.MouseButton1Click:Connect(function()
         keyStatus.TextColor3 = Color3.fromRGB(255,180,180)
         keyStatus.Text = "❌ Falscher Key. Versuch nochmal."
         keyBox.Text = ""
-        -- kleiner Shake-Effect
         local orig = KeyFrame.Position
         KeyFrame.Position = orig + UDim2.new(0, 6, 0, 0)
         task.wait(0.05)
@@ -436,7 +510,6 @@ keyBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Allow enter key to submit
 keyBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then keyBtn:Activate() end
 end)
@@ -485,5 +558,13 @@ RunService.RenderStepped:Connect(function()
 
         flyLV.VectorVelocity = moveDir * flySpeed
         flyAO.CFrame = cam.CFrame
+    end
+
+    -- FAKE AIMBOT SNAP (hold RMB)
+    if aimbotEnabled and aimingHeld then
+        local targetHead = getBestTarget()
+        if targetHead then
+            snapTo(targetHead)
+        end
     end
 end)
